@@ -1,0 +1,43 @@
+#!/usr/bin/python
+# -*- coding:utf-8 -*- 
+import sys
+import os
+import re
+
+# 如果不是管道方式接入的话 
+if sys.stdin.isatty():
+    print "本程序的使用方法为：将你程序的输出作为本程序的输入，然后在你想看的时候，监控本程序的输出日志。\n你的程序输出 | %s [%s]" % (os.path.basename(sys.argv[0]), '日志文件名')
+    sys.exit()
+
+# 日志文件
+if len(sys.argv)<=1:  # 如果有传入参数，那么就用传入的参数作为日志文件，写入
+    BLACKHOLE_LOG_FILE = os.path.realpath(sys.argv[0]) + '.log' # 默认为当前程序所在路径下生产以 [程序.log] 的文件
+else:
+    BLACKHOLE_LOG_FILE = os.path.realpath(sys.argv[1]) # 将用户传入的相对路径转成真实路径
+    if os.path.exists(BLACKHOLE_LOG_FILE) and os.path.getsize(BLACKHOLE_LOG_FILE)>0 :
+        print "注意你想要监听的日志文件 %s 已经存在，如果使用本程序，将会清空此文件" % BLACKHOLE_LOG_FILE
+        sys.exit()
+
+# 以写的模式打开日志文件
+F = open(BLACKHOLE_LOG_FILE,'w')
+
+while(1):
+    # 读取日志文件有多少使用者（本程序 open 会使用到，以及 fuser 命令会使用到，所有没有其他的使用的话，此文件固定有两个使用者）
+    try: has_used = os.popen('fuser ' + BLACKHOLE_LOG_FILE + ' 2>/dev/null').readlines()
+    except: sys.exit() 
+
+    # 将 fuser 的输出按照空格分隔成数值，每一个使用者一个元素
+    has_used = re.split(' +',''.join(has_used).strip())
+
+    # 如果有人需要使用日志文件的话，比如 tail -f 
+    line = sys.stdin.readline()
+    if len(has_used)>2:
+        # 将一行标准输入的内容写的文件里面
+        F.writelines(line)
+
+        # 将写入缓存的内容刷新到文件里，这样的话，可以立即将输入写入到磁盘
+        F.flush()
+    else:
+        # 如果没有人使用的话，将文件变成空
+        F.truncate(0)
+
